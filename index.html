@@ -1224,6 +1224,7 @@ e_clock:{ bg:'precinct', ending:{
   }
 
   function typeLine(text, slow){
+    if(typing) clearInterval(typing.id);
     const el=$('line');
     el.innerHTML='';
     const caret=document.createElement('span'); caret.className='caret';
@@ -1231,19 +1232,18 @@ e_clock:{ bg:'precinct', ending:{
     let i=0;
     const speed = slow?34:16;
     $('continue').classList.remove('pulse');
-    clearInterval(typing);
-    typing=setInterval(()=>{
-      if(i<text.length){
-        caret.before(document.createTextNode(text[i++]));
-        if(i%3===0) Sfx.tick && Math.random()<.0; // silent typing (ticks reserved for UI)
-      } else finishType();
+    const tw={ text, el, id:null };
+    tw.id=setInterval(()=>{
+      if(i<text.length) caret.before(document.createTextNode(text[i++]));
+      else finishType(tw);
     }, speed);
-    typing._text=text; typing._el=el; typing._caret=caret;
+    typing=tw;
   }
-  function finishType(){
-    clearInterval(typing);
-    const t=typing._text, el=typing._el;
-    el.textContent=t;
+  function finishType(tw){
+    tw = tw || typing;
+    if(!tw) return;
+    clearInterval(tw.id);
+    tw.el.textContent=tw.text;
     typing=null;
     $('continue').textContent = lineIdx<lines.length-1 ? 'CLICK OR SPACE' : (hasChoices()?'CHOOSE':'CLICK OR SPACE');
     $('continue').classList.add('pulse');
