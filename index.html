@@ -1398,7 +1398,7 @@ e_clock:{ bg:'precinct', ending:{
     const cv=$('flowchart'); if(!cv) return;
     const ctx=cv.getContext('2d');
     const W=cv.width, H=cv.height;
-    const colX = i => 90 + i*(W-140)/4;
+    const colX = i => 64 + i*(W-320)/4;
     const rowY = r => 34 + r*13.5;
     ctx.clearRect(0,0,W,H);
     ctx.font='10px "Avenir Next","Segoe UI",system-ui,sans-serif';
