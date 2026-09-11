@@ -60,7 +60,7 @@ canvas#bg{position:absolute;inset:0;width:100%;height:100%;display:block}
 #chapter-card .sub{margin-top:16px;font-size:12px;letter-spacing:.3em;color:var(--dim);text-transform:uppercase}
 
 /* dialogue */
-#dialogue{visibility:hidden;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(7vh + 64px);
+#dialogue{transition:opacity .25s ease;visibility:hidden;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(7vh + 64px);
   width:min(760px,88vw);z-index:10;background:var(--panel);border:1px solid rgba(89,215,232,.14);
   border-left:2px solid var(--accent);padding:20px 26px 22px;backdrop-filter:blur(6px)}
 #speaker{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
@@ -125,7 +125,7 @@ canvas#bg{position:absolute;inset:0;width:100%;height:100%;display:block}
 #howto p{font-size:14px;line-height:1.9;color:var(--ink);margin-bottom:12px;font-weight:300}
 #howto .k{color:var(--accent)}
 
-#mute{position:absolute;top:calc(7vh + 44px);right:22px;z-index:12;background:none;border:none;
+#mute{position:absolute;bottom:calc(7vh + 18px);right:22px;z-index:12;background:none;border:none;
   color:var(--dim);font-size:10px;letter-spacing:.26em;text-transform:uppercase;cursor:pointer}
 #mute:hover{color:var(--accent)}
 @media (max-width:640px){
@@ -1269,6 +1269,7 @@ e_clock:{ bg:'precinct', ending:{
   /* ---------- choices ---------- */
   function presentChoices(n){
     awaitingChoice=true;
+    $('dialogue').style.opacity='0';
     $('continue').textContent='CHOOSE'; $('continue').classList.add('pulse');
     const box=$('choices'); box.innerHTML='';
     const avail = n.choices.map((c,i)=>({c,i})).filter(({c})=> !c.cond || c.cond(S));
@@ -1295,6 +1296,7 @@ e_clock:{ bg:'precinct', ending:{
   function pick(c){
     if(!awaitingChoice) return;
     awaitingChoice=false;
+    $('dialogue').style.opacity='1';
     clearTimer();
     Sfx.heartbeat(false);
     Sfx.tick();
