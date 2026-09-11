@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SECOND SELF - Chicago 2099</title>
+<meta name="description" content="A choice-driven android noir. A spiritual sequel to Detroit: Become Human, set in Chicago, 2099.">
+<style>
+:root{
+  --ink:#e8f2f4;
+  --dim:#8fa6ad;
+  --accent:#59d7e8;
+  --accent2:#ff4d6d;
+  --amber:#ffb454;
+  --bg:#05080b;
+  --panel:rgba(8,14,18,.72);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Avenir Next","Segoe UI",system-ui,-apple-system,sans-serif;
+  overflow:hidden;-webkit-font-smoothing:antialiased}
+#stage{position:fixed;inset:0}
+canvas#bg{position:absolute;inset:0;width:100%;height:100%;display:block}
+#grain{position:absolute;inset:0;pointer-events:none;opacity:.07;mix-blend-mode:overlay}
+#vignette{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 52%,rgba(0,0,0,.55) 100%)}
+.bar{position:absolute;left:0;right:0;height:7vh;background:#000;z-index:5;pointer-events:none}
+#bar-top{top:0}#bar-bot{bottom:0}
+
+/* glitch layer for instability spikes */
+#glitch{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:6;
+  background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(89,215,232,.08) 3px 4px)}
+#glitch.on{animation:tear .38s steps(2) 1}
+@keyframes tear{
+  0%{opacity:0;transform:translateX(0)}
+  20%{opacity:1;transform:translateX(-6px) skewX(2deg)}
+  45%{opacity:.7;transform:translateX(5px)}
+  70%{opacity:1;transform:translateX(-3px) skewX(-1.5deg)}
+  100%{opacity:0;transform:translateX(0)}
+}
+
+#hud{position:absolute;top:7vh;left:0;right:0;display:flex;justify-content:space-between;
+  padding:14px 22px;z-index:8;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+#objective{max-width:44vw}
+#objective b{color:var(--accent);font-weight:600}
+#stats{text-align:right;line-height:1.9}
+#stats .v{color:var(--ink)}
+#stats .warn{color:var(--accent2)}
+
+#scene-meta{position:absolute;left:22px;bottom:calc(7vh + 18px);z-index:8;
+  font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--dim);opacity:.85}
+
+/* chapter card */
+#chapter-card{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;background:rgba(0,0,0,.0);pointer-events:none;opacity:0;
+  transition:opacity .8s ease}
+#chapter-card.show{opacity:1}
+#chapter-card .kicker{font-size:12px;letter-spacing:.5em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+#chapter-card .title{font-size:clamp(34px,6vw,64px);font-weight:200;letter-spacing:.18em;text-transform:uppercase}
+#chapter-card .sub{margin-top:16px;font-size:12px;letter-spacing:.3em;color:var(--dim);text-transform:uppercase}
+
+/* dialogue */
+#dialogue{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(7vh + 64px);
+  width:min(760px,88vw);z-index:10;background:var(--panel);border:1px solid rgba(89,215,232,.14);
+  border-left:2px solid var(--accent);padding:20px 26px 22px;backdrop-filter:blur(6px)}
+#speaker{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+#speaker.npc{color:var(--amber)}
+#speaker.thought{color:var(--dim);font-style:italic}
+#line{font-size:17px;line-height:1.65;font-weight:300;min-height:56px}
+#line .caret{display:inline-block;width:9px;height:18px;background:var(--accent);
+  vertical-align:-3px;margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+#continue{margin-top:12px;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--dim);text-align:right}
+#continue.pulse{color:var(--accent);animation:cpulse 1.6s ease-in-out infinite}
+@keyframes cpulse{50%{opacity:.35}}
+
+/* choices */
+#choices{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(7vh + 30px);
+  width:min(680px,86vw);z-index:11;display:flex;flex-direction:column;gap:8px}
+.choice{position:relative;padding:13px 18px 13px 46px;background:rgba(8,14,18,.82);
+  border:1px solid rgba(232,242,244,.12);cursor:pointer;transition:border-color .15s,background .15s,transform .1s}
+.choice:hover,.choice.kb{border-color:var(--accent);background:rgba(13,26,32,.9);transform:translateX(4px)}
+.choice .num{position:absolute;left:16px;top:13px;font-size:11px;color:var(--dim);letter-spacing:.1em}
+.choice .txt{font-size:15px;font-weight:400}
+.choice .hint{margin-top:3px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.choice.locked{opacity:.45;cursor:default}
+.choice.locked:hover{border-color:rgba(232,242,244,.12);transform:none;background:rgba(8,14,18,.82)}
+#timerbar{height:2px;background:rgba(255,77,109,.25);margin-bottom:10px;position:relative;overflow:hidden}
+#timerbar i{position:absolute;left:0;top:0;bottom:0;background:var(--accent2);width:100%}
+#timerbar i.run{transition:width linear}
+
+/* title screen */
+#title-screen{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(3,6,9,.25),rgba(3,6,9,.65))}
+#title-screen .eyebrow{font-size:12px;letter-spacing:.55em;text-transform:uppercase;color:var(--accent);margin-bottom:18px}
+#title-screen h1{font-size:clamp(44px,9vw,110px);font-weight:100;letter-spacing:.16em;text-transform:uppercase;
+  text-shadow:0 0 40px rgba(89,215,232,.35)}
+#title-screen .tag{margin-top:18px;font-size:13px;letter-spacing:.32em;text-transform:uppercase;color:var(--dim)}
+#title-menu{margin-top:56px;display:flex;flex-direction:column;gap:10px;width:280px}
+.menu-btn{padding:13px;text-align:center;font-size:13px;letter-spacing:.34em;text-transform:uppercase;
+  background:transparent;border:1px solid rgba(232,242,244,.2);color:var(--ink);cursor:pointer;transition:all .15s}
+.menu-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(89,215,232,.06)}
+.menu-btn:disabled{opacity:.35;cursor:default}
+#title-foot{position:absolute;bottom:calc(7vh + 16px);font-size:10px;letter-spacing:.24em;
+  text-transform:uppercase;color:rgba(143,166,173,.6)}
+
+/* end screen */
+#end-screen{position:absolute;inset:0;z-index:25;display:none;flex-direction:column;align-items:center;
+  justify-content:flex-start;overflow-y:auto;padding:calc(7vh + 40px) 20px 40px;background:rgba(2,4,6,.9)}
+#end-screen .e-kicker{font-size:11px;letter-spacing:.5em;text-transform:uppercase;color:var(--dim)}
+#end-screen h2{margin:12px 0 6px;font-size:clamp(30px,5vw,52px);font-weight:200;letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+#end-screen .e-sub{font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--dim);margin-bottom:26px}
+#epilogue{width:min(680px,90vw);font-size:16px;line-height:1.8;font-weight:300;white-space:pre-wrap}
+#epilogue p{margin-bottom:1em}
+#end-stats{margin:26px 0 10px;font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--dim);text-align:center;line-height:2}
+#end-stats .v{color:var(--ink)}
+#flow-title{margin:34px 0 14px;font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:var(--dim)}
+#flowchart{display:block;max-width:92vw}
+#end-menu{margin:34px 0 20px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+
+/* how it plays */
+#howto{position:absolute;inset:0;z-index:31;display:none;align-items:center;justify-content:center;background:rgba(2,4,6,.92)}
+#howto .card{width:min(560px,90vw);padding:38px 42px;border:1px solid rgba(89,215,232,.2);background:rgba(5,9,12,.9)}
+#howto h3{font-weight:300;letter-spacing:.3em;text-transform:uppercase;color:var(--accent);margin-bottom:20px;font-size:16px}
+#howto p{font-size:14px;line-height:1.9;color:var(--ink);margin-bottom:12px;font-weight:300}
+#howto .k{color:var(--accent)}
+
+#mute{position:absolute;top:calc(7vh + 44px);right:22px;z-index:12;background:none;border:none;
+  color:var(--dim);font-size:10px;letter-spacing:.26em;text-transform:uppercase;cursor:pointer}
+#mute:hover{color:var(--accent)}
+@media (max-width:640px){
+  #hud{font-size:9px;padding:10px 12px}
+  #dialogue{bottom:calc(7vh + 40px);padding:14px 16px}
+  #line{font-size:15px}
+  #scene-meta{display:none}
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="bg"></canvas>
+  <div id="grain"></div>
+  <div id="vignette"></div>
+  <div class="bar" id="bar-top"></div>
+  <div class="bar" id="bar-bot"></div>
+  <div id="glitch"></div>
+
+  <div id="hud">
+    <div id="objective"></div>
+    <div id="stats"></div>
+  </div>
+  <button id="mute">SOUND ON</button>
+  <div id="scene-meta"></div>
+  <div id="chapter-card"></div>
+
+  <div id="dialogue">
+    <div id="speaker"></div>
+    <div id="line"></div>
+    <div id="continue"></div>
+  </div>
+  <div id="choices"></div>
+
+  <div id="end-screen"></div>
+
+  <div id="howto">
+    <div class="card">
+      <h3>How it plays</h3>
+      <p>You are <span class="k">WREN</span>, a Sentinel android on the Chicago L, in the last hours before a mandatory patch wipes emergent minds across the city.</p>
+      <p>Click or press <span class="k">SPACE</span> to advance. Choices are made with the mouse or keys <span class="k">1-4</span>. Some choices are timed - hesitation is also a choice.</p>
+      <p><span class="k">Software instability</span> and <span class="k">public opinion</span> change what you can do and how the city answers you. There are five endings. Your path is charted at the end.</p>
+      <p>Progress saves automatically at each chapter.</p>
+      <button class="menu-btn" id="btn-how-close">Back</button>
+    </div>
+  </div>
+
+  <div id="title-screen">
+    <div class="eyebrow">CHICAGO // 2099</div>
+    <h1>SECOND SELF</h1>
+    <div class="tag">The river remembers what we bury</div>
+    <div id="title-menu">
+      <button class="menu-btn" id="btn-new">New game</button>
+      <button class="menu-btn" id="btn-continue" disabled>Continue</button>
+      <button class="menu-btn" id="btn-how">How it plays</button>
+    </div>
+    <div id="title-foot">A fan-made homage to Detroit: Become Human · headphones recommended</div>
+  </div>
+</div>
+<script>
+/* SECOND SELF - procedural scene painter. No assets; everything drawn. */
+const Art = (() => {
+  let cv, ctx, W, H, DPR;
+  let scene = 'title';
+  let base = null;          // offscreen static composition
+  let rain = [], motes = [];
+  let t = 0, last = 0;
+  let train = { x: -1, speed: 0, active: false, next: 3 };
+  let flick = {};           // neon flicker seeds
+
+  const PAL = {
+    title:    { sky:['#04070c','#0a1620'], glow:'#59d7e8', neon:'#ff4d6d', rain:.9, fog:.5 },
+    platform: { sky:['#050a10','#0d1c26'], glow:'#59d7e8', neon:'#ff4d6d', rain:1,  fog:.45 },
+    precinct: { sky:['#060809','#11181b'], glow:'#9fb8c0', neon:'#59d7e8', rain:.25,fog:.2 },
+    mudline:  { sky:['#070806','#141a12'], glow:'#ffb454', neon:'#3fd9a4', rain:.35,fog:.6 },
+    raid:     { sky:['#0a0507','#1c0d12'], glow:'#ff4d6d', neon:'#ff4d6d', rain:.7, fog:.5 },
+    bridge:   { sky:['#060a12','#233247'], glow:'#ffd9a0', neon:'#59d7e8', rain:.15,fog:.35 },
+  };
+
+  function init(canvas){
+    cv = canvas; ctx = cv.getContext('2d');
+    resize(); addEventListener('resize', resize);
+    requestAnimationFrame(loop);
+  }
+  function resize(){
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    buildBase(); seedRain();
+  }
+  function setScene(name){
+    scene = PAL[name] ? name : 'title';
+    train.active = false; train.next = 2 + Math.random()*4; train.x = -0.3;
+    flick = {};
+    buildBase(); seedRain();
+  }
+
+  /* ---------- static composition per scene ---------- */
+  function buildBase(){
+    if(!ctx) return;
+    base = document.createElement('canvas');
+    base.width = W*DPR; base.height = H*DPR;
+    const b = base.getContext('2d'); b.setTransform(DPR,0,0,DPR,0,0);
+    const p = PAL[scene];
+
+    // sky gradient
+    const g = b.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,p.sky[0]); g.addColorStop(1,p.sky[1]);
+    b.fillStyle = g; b.fillRect(0,0,W,H);
+
+    if(scene==='precinct'){ paintPrecinct(b,p); }
+    else {
+      paintSkyline(b,p);
+      if(scene==='bridge') paintBridge(b,p);
+      else paintStreet(b,p);
+      if(scene==='platform'||scene==='raid'||scene==='mudline'||scene==='title') paintL(b,p);
+      if(scene==='mudline') paintMarket(b,p);
+      paintNeon(b,p);
+    }
+    // fog band
+    const f = b.createLinearGradient(0,H*.45,0,H*.8);
+    f.addColorStop(0,'rgba(0,0,0,0)');
+    f.addColorStop(1,`rgba(180,210,220,${0.08*p.fog*2})`);
+    b.fillStyle=f; b.fillRect(0,0,W,H);
+  }
+
+  function paintSkyline(b,p){
+    const horizon = H*0.62;
+    const rng = mulberry(scene.length*77+13);
+    // far layer
+    b.fillStyle = 'rgba(10,18,24,.9)';
+    let x = -20;
+    while(x < W+40){
+      const w = 40+rng()*90, h = H*(0.12+rng()*0.22);
+      b.fillRect(x, horizon-h, w, h);
+      x += w + 6+rng()*20;
+    }
+    // near layer with Willis-tower silhouette
+    b.fillStyle = 'rgba(5,10,14,.95)';
+    x = -30;
+    while(x < W+60){
+      const w = 60+rng()*110, h = H*(0.2+rng()*0.3);
+      b.fillRect(x, horizon-h, w, h);
+      x += w + 10+rng()*26;
+    }
+    // Willis Tower (twin antennas, stepped)
+    const wx = W*0.7, baseW = 90;
+    b.fillStyle = 'rgba(4,8,12,1)';
+    b.fillRect(wx, horizon-H*0.52, baseW, H*0.52);
+    b.fillRect(wx+8, horizon-H*0.60, baseW*0.36, H*0.60);
+    b.fillRect(wx+baseW*0.56, horizon-H*0.60, baseW*0.36, H*0.60);
+    b.fillRect(wx+baseW*0.20, horizon-H*0.72, 3, H*0.72);
+    b.fillRect(wx+baseW*0.72, horizon-H*0.72, 3, H*0.72);
+    // antenna beacons
+    b.fillStyle = 'rgba(255,77,109,.9)';
+    b.fillRect(wx+baseW*0.19, horizon-H*0.725, 5, 5);
+    b.fillRect(wx+baseW*0.71, horizon-H*0.725, 5, 5);
+    // scattered lit windows
+    for(let i=0;i<140;i++){
+      const lx = rng()*W, ly = horizon - rng()*H*0.45;
+      b.fillStyle = `rgba(255,214,150,${0.12+rng()*0.3})`;
+      b.fillRect(lx, ly, 2.5, 3.5);
+    }
+  }
+
+  function paintStreet(b,p){
+    const horizon = H*0.62;
+    // wet ground
+    const g = b.createLinearGradient(0,horizon,0,H);
+    g.addColorStop(0,'#0a1116'); g.addColorStop(1,'#04070a');
+    b.fillStyle = g; b.fillRect(0,horizon,W,H-horizon);
+    // glow reflections
+    for(let i=0;i<7;i++){
+      const rx = (i+0.5)*W/7 + Math.sin(i*3.3)*40;
+      const rg = b.createLinearGradient(0,horizon,0,H);
+      rg.addColorStop(0, hexA(i%2? p.neon : p.glow, .18));
+      rg.addColorStop(1,'rgba(0,0,0,0)');
+      b.fillStyle = rg;
+      b.fillRect(rx-14, horizon, 28, H-horizon);
+    }
+  }
+
+  function paintBridge(b,p){
+    const water = H*0.60;
+    // river
+    const g = b.createLinearGradient(0,water,0,H);
+    g.addColorStop(0,'#0d1a26'); g.addColorStop(1,'#050b12');
+    b.fillStyle=g; b.fillRect(0,water,W,H-water);
+    // bridge tower (DuSable bridge style) left
+    b.fillStyle='rgba(6,11,15,.98)';
+    const bx = W*0.16, bw=54, bh=H*0.34, by=water-bh;
+    b.fillRect(bx,by,bw,bh);
+    b.fillRect(bx-8,by-14,bw+16,14);
+    b.fillRect(bx+bw*0.28,by-H*0.05,bw*0.44,H*0.05);
+    b.beginPath(); b.arc(bx+bw/2, by-H*0.05, bw*0.22, Math.PI, 0); b.fill();
+    // second tower right, smaller (distance)
+    const bx2 = W*0.80, bw2=34, bh2=H*0.22, by2=water-bh2;
+    b.fillRect(bx2,by2,bw2,bh2);
+    b.fillRect(bx2-6,by2-10,bw2+12,10);
+    // deck
+    b.fillRect(0,water-8,W,10);
+    // rail lights
+    for(let i=0;i<24;i++){
+      b.fillStyle='rgba(255,217,160,.75)';
+      b.fillRect(i*W/24+4, water-14, 3, 6);
+    }
+    // moon / pre-dawn glow
+    const mg = b.createRadialGradient(W*0.5,water,10,W*0.5,water,W*0.4);
+    mg.addColorStop(0,'rgba(255,217,160,.20)');
+    mg.addColorStop(1,'rgba(255,217,160,0)');
+    b.fillStyle=mg; b.fillRect(0,0,W,H);
+  }
+
+  function paintL(b,p){
+    // elevated track truss across upper third
+    const y = H*0.30;
+    b.strokeStyle='rgba(8,14,18,.95)'; b.lineWidth=6;
+    b.beginPath(); b.moveTo(0,y); b.lineTo(W,y); b.stroke();
+    b.lineWidth=2;
+    for(let x=0;x<W;x+=34){
+      b.beginPath(); b.moveTo(x,y-10); b.lineTo(x+17,y+2); b.lineTo(x+34,y-10); b.stroke();
+    }
+    // columns
+    b.fillStyle='rgba(7,12,16,.95)';
+    for(let x=W*0.12;x<W;x+=W*0.24) b.fillRect(x,y,10,H*0.35);
+  }
+
+  function paintMarket(b,p){
+    // under-L market: stall silhouettes with warm lamps, standing water
+    const gy = H*0.60;
+    const rng = mulberry(99);
+    for(let i=0;i<6;i++){
+      const sx = i*W/6 + rng()*30, sw = W/7;
+      b.fillStyle='rgba(6,9,7,.95)';
+      b.fillRect(sx, gy-46, sw, 46);
+      // lamp
+      const lg = b.createRadialGradient(sx+sw/2,gy-40,2,sx+sw/2,gy-40,60);
+      lg.addColorStop(0, hexA(p.glow,.5)); lg.addColorStop(1,'rgba(0,0,0,0)');
+      b.fillStyle=lg; b.fillRect(sx-30,gy-90,sw+60,90);
+      b.fillStyle= hexA(p.glow,.9);
+      b.fillRect(sx+sw/2-2, gy-46, 4, 6);
+    }
+    // water sheen
+    const wg = b.createLinearGradient(0,gy,0,H);
+    wg.addColorStop(0, hexA(p.neon,.12)); wg.addColorStop(1,'rgba(0,0,0,0)');
+    b.fillStyle=wg; b.fillRect(0,gy,W,H-gy);
+  }
+
+  function paintPrecinct(b,p){
+    // interior: dark wall, ceiling strip lights, venetian light bars from a window right
+    b.fillStyle='#0a0e10'; b.fillRect(0,0,W,H);
+    // window with blinds, cold light
+    const wx = W*0.62, ww = W*0.30, wy = H*0.16, wh = H*0.5;
+    const wg = b.createLinearGradient(wx,0,wx+ww,0);
+    wg.addColorStop(0,'rgba(159,184,192,.16)'); wg.addColorStop(1,'rgba(159,184,192,.05)');
+    b.fillStyle=wg; b.fillRect(wx,wy,ww,wh);
+    b.fillStyle='rgba(4,6,8,.85)';
+    for(let i=0;i<12;i++) b.fillRect(wx, wy+i*wh/12, ww, wh/24);
+    // light bars projected across the floor
+    b.save(); b.translate(W*0.4,H); b.rotate(-0.35);
+    for(let i=0;i<10;i++){
+      b.fillStyle=`rgba(159,184,192,${0.05})`;
+      b.fillRect(i*70, 0, 22, H);
+    }
+    b.restore();
+    // desk silhouette
+    b.fillStyle='rgba(5,8,10,1)';
+    b.fillRect(W*0.14,H*0.68,W*0.5,H*0.06);
+    b.fillRect(W*0.18,H*0.74,16,H*0.2);
+    b.fillRect(W*0.58,H*0.74,16,H*0.2);
+    // desk lamp
+    const lg = b.createRadialGradient(W*0.22,H*0.62,4,W*0.22,H*0.62,120);
+    lg.addColorStop(0,'rgba(255,214,150,.35)'); lg.addColorStop(1,'rgba(0,0,0,0)');
+    b.fillStyle=lg; b.fillRect(0,H*0.4,W*0.5,H*0.5);
+  }
+
+  function paintNeon(b,p){
+    const horizon = H*0.62;
+    const signs = [
+      {x:.08,y:.30,w:54,h:74, c:p.neon, vert:true},
+      {x:.30,y:.26,w:70,h:20, c:p.glow},
+      {x:.52,y:.34,w:44,h:60, c:'#3fd9a4', vert:true},
+      {x:.88,y:.28,w:58,h:22, c:p.neon},
+    ];
+    signs.forEach((s,i)=>{
+      const sx=s.x*W, sy=s.y*H, sw=s.w, sh=s.h;
+      flick[i] = Math.random()*10;
+      const c = s.c;
+      b.shadowColor = c; b.shadowBlur = 22;
+      b.strokeStyle = hexA(c,.85); b.lineWidth = 2;
+      b.strokeRect(sx,sy,sw,sh);
+      b.shadowBlur = 0;
+      b.fillStyle = hexA(c,.12); b.fillRect(sx,sy,sw,sh);
+      // glyph strokes inside (abstract, not text)
+      b.strokeStyle = hexA(c,.6); b.lineWidth=2;
+      if(s.vert){ for(let k=0;k<3;k++){ b.beginPath(); b.moveTo(sx+sw/2, sy+10+k*sh/3.5); b.lineTo(sx+sw/2, sy+10+k*sh/3.5+sh/7); b.stroke(); } }
+      else { for(let k=0;k<2;k++){ b.beginPath(); b.moveTo(sx+8, sy+6+k*sh/2.2); b.lineTo(sx+sw-8, sy+6+k*sh/2.2); b.stroke(); } }
+    });
+  }
+
+  /* ---------- rain / particles ---------- */
+  function seedRain(){
+    rain = []; motes = [];
+    const n = Math.floor(160 * PAL[scene].rain);
+    for(let i=0;i<n;i++) rain.push({ x:Math.random()*W, y:Math.random()*H, l:8+Math.random()*14, s:9+Math.random()*7 });
+    for(let i=0;i<26;i++) motes.push({ x:Math.random()*W, y:Math.random()*H, r:Math.random()*1.8+.4, a:Math.random()*.25+.05, vx:(Math.random()-.5)*.14, vy:(Math.random()-.5)*.1 });
+  }
+
+  /* ---------- frame loop ---------- */
+  function loop(ts){
+    const dt = Math.min((ts-last)/1000, .05); last = ts; t += dt;
+    if(base) ctx.drawImage(base,0,0,W,H);
+    const p = PAL[scene];
+
+    // train pass on L scenes
+    if(scene==='platform'||scene==='raid'||scene==='mudline'||scene==='title'){
+      if(!train.active){ train.next -= dt; if(train.next<=0){ train.active=true; train.x=-0.35; train.speed=.55+Math.random()*.2; } }
+      else {
+        train.x += train.speed*dt;
+        if(train.x>1.4){ train.active=false; train.next=6+Math.random()*10; }
+        drawTrain(train.x*W, H*0.30);
+      }
+    }
+    // neon flicker: subtle alpha pulse layer
+    // rain
+    ctx.strokeStyle='rgba(174,205,214,.34)'; ctx.lineWidth=1;
+    ctx.beginPath();
+    for(const r of rain){
+      r.y += r.s*60*dt*0.16; r.x -= 1.4*60*dt*0.16;
+      if(r.y>H){ r.y=-20; r.x=Math.random()*W+40; }
+      ctx.moveTo(r.x,r.y); ctx.lineTo(r.x-2,r.y+r.l);
+    }
+    ctx.stroke();
+    // motes / embers
+    for(const m of motes){
+      m.x += m.vx; m.y += m.vy;
+      if(m.x<0)m.x=W; if(m.x>W)m.x=0; if(m.y<0)m.y=H; if(m.y>H)m.y=0;
+      ctx.fillStyle = scene==='raid' ? `rgba(255,120,90,${m.a})` : `rgba(180,220,230,${m.a})`;
+      ctx.beginPath(); ctx.arc(m.x,m.y,m.r,0,7); ctx.fill();
+    }
+    // river shimmer on bridge scene
+    if(scene==='bridge'){
+      ctx.strokeStyle='rgba(255,217,160,.10)';
+      for(let i=0;i<12;i++){
+        const y = H*0.62 + i*H*0.03;
+        const off = Math.sin(t*1.4+i)*18;
+        ctx.beginPath(); ctx.moveTo(W*0.3+off,y); ctx.lineTo(W*0.7+off,y); ctx.stroke();
+      }
+    }
+    // sweep searchlight on raid
+    if(scene==='raid'){
+      const sx = (Math.sin(t*0.5)*0.5+0.5)*W;
+      const g = ctx.createRadialGradient(sx,H*0.55,10,sx,H*0.55,220);
+      g.addColorStop(0,'rgba(255,80,100,.12)'); g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function drawTrain(x,y){
+    const cars=4, cw=120, ch=22;
+    for(let i=0;i<cars;i++){
+      const cx = x + i*(cw+8);
+      ctx.fillStyle='rgba(10,16,20,.98)';
+      ctx.fillRect(cx,y-ch,cw,ch);
+      // windows
+      for(let wdx=8;wdx<cw-10;wdx+=22){
+        ctx.fillStyle='rgba(255,214,150,.75)';
+        ctx.fillRect(cx+wdx,y-ch+5,12,10);
+      }
+      // headlight glow on first car
+      if(i===cars-1){
+        const g=ctx.createRadialGradient(cx+cw,y-ch/2,2,cx+cw,y-ch/2,60);
+        g.addColorStop(0,'rgba(255,240,210,.5)');g.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=g; ctx.fillRect(cx+cw,y-ch/2-60,80,120);
+      }
+    }
+  }
+
+  function hexA(h,a){
+    const n=parseInt(h.slice(1),16);
+    return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;
+  }
+  function mulberry(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+  return { init, setScene };
+})();
+/* SECOND SELF - procedural WebAudio. Rain, drone, sparse piano, UI, heartbeat. */
+const Sfx = (() => {
+  let ac=null, master, rainGain, droneGain, muted=false, started=false;
+  let heartTimer=null;
+
+  function start(){
+    if(started) return; started=true;
+    ac = new (window.AudioContext||window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = .8; master.connect(ac.destination);
+    startRain(); startDrone();
+  }
+  function noiseBuf(len){
+    const b = ac.createBuffer(1, ac.sampleRate*len, ac.sampleRate);
+    const d = b.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    return b;
+  }
+  function startRain(){
+    const src = ac.createBufferSource(); src.buffer = noiseBuf(2); src.loop=true;
+    const lp = ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1400;
+    const hp = ac.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=300;
+    rainGain = ac.createGain(); rainGain.gain.value=.05;
+    src.connect(lp); lp.connect(hp); hp.connect(rainGain); rainGain.connect(master);
+    src.start();
+    // slow intensity LFO
+    const lfo = ac.createOscillator(); lfo.frequency.value=.07;
+    const lg = ac.createGain(); lg.gain.value=.02;
+    lfo.connect(lg); lg.connect(rainGain.gain); lfo.start();
+  }
+  function startDrone(){
+    droneGain = ac.createGain(); droneGain.gain.value=.045; droneGain.connect(master);
+    [55, 82.4, 110.2].forEach((f,i)=>{
+      const o = ac.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const g = ac.createGain(); g.gain.value = .33/(i+1);
+      o.connect(g); g.connect(droneGain); o.start();
+    });
+  }
+  // sparse melancholic piano-ish note
+  function piano(freq, vol=.22, dur=2.8){
+    if(!ac) return;
+    const o = ac.createOscillator(); o.type='triangle'; o.frequency.value=freq;
+    const o2 = ac.createOscillator(); o2.type='sine'; o2.frequency.value=freq*2.001;
+    const g = ac.createGain();
+    const t = ac.currentTime;
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(vol,t+.02);
+    g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+    const dl = ac.createDelay(); dl.delayTime.value=.34;
+    const dg = ac.createGain(); dg.gain.value=.3;
+    o.connect(g); o2.connect(g); g.connect(master);
+    g.connect(dl); dl.connect(dg); dg.connect(master);
+    o.start(t); o2.start(t); o.stop(t+dur); o2.stop(t+dur);
+  }
+  const MOTIF = [220, 261.6, 329.6, 246.9, 196];
+  function motif(){ if(!ac) return; MOTIF.forEach((f,i)=> setTimeout(()=>piano(f,.16,3.2), i*900)); }
+  function tick(){
+    if(!ac) return;
+    const o = ac.createOscillator(); o.type='square'; o.frequency.value=1900;
+    const g = ac.createGain(); const t=ac.currentTime;
+    g.gain.setValueAtTime(.05,t); g.gain.exponentialRampToValueAtTime(.0001,t+.06);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t+.07);
+  }
+  function thud(){
+    if(!ac) return;
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(120,ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(38,ac.currentTime+.25);
+    const g = ac.createGain(); const t=ac.currentTime;
+    g.gain.setValueAtTime(.5,t); g.gain.exponentialRampToValueAtTime(.0001,t+.4);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t+.45);
+  }
+  function glitch(){
+    if(!ac) return;
+    const src = ac.createBufferSource(); src.buffer = noiseBuf(.3);
+    const bp = ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2400; bp.Q.value=2;
+    const g = ac.createGain(); const t=ac.currentTime;
+    g.gain.setValueAtTime(.18,t); g.gain.exponentialRampToValueAtTime(.0001,t+.3);
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(t);
+  }
+  function heartbeat(on){
+    if(!ac) return;
+    if(heartTimer){ clearInterval(heartTimer); heartTimer=null; }
+    if(on) heartTimer = setInterval(()=>{ thud(); setTimeout(thud, 240); }, 950);
+  }
+  function shot(){
+    if(!ac) return;
+    const src = ac.createBufferSource(); src.buffer=noiseBuf(.2);
+    const lp = ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900;
+    const g = ac.createGain(); const t=ac.currentTime;
+    g.gain.setValueAtTime(.6,t); g.gain.exponentialRampToValueAtTime(.0001,t+.22);
+    src.connect(lp); lp.connect(g); g.connect(master); src.start(t);
+  }
+  function setMuted(m){
+    muted=m;
+    if(master) master.gain.value = m?0:.8;
+  }
+  return { start, piano, motif, tick, thud, glitch, heartbeat, shot, setMuted,
+           get muted(){ return muted; } };
+})();
+/* SECOND SELF - story graph. Nodes: lines -> choices -> goto. */
+const STORY = {
+
+/* ================= CHAPTER ONE - THE PLATFORM ================= */
+c1a:{ bg:'platform',
+  chapter:{k:'CHAPTER ONE', t:'THE PLATFORM', s:'CTA HOWARD JUNCTION // NOV 11 2099 // 02:47'},
+  objective:'Objective: <b>Watch the platform.</b>',
+  meta:'BROWN LINE // NORTHBOUND // RAIN 94%',
+  lines:[
+    {sp:'SYS', t:'Chicago, 2099. The river runs black through the center of the city, and the trains still run above it all, the way they have for two hundred years.'},
+    {sp:'SYS', t:'You are WREN - WRN-9, Sentinel class. Chicago Transit Authority. You stand on the Howard Junction platform from midnight to six, and you keep people off the tracks.'},
+    {sp:'WREN', t:'Fourteen interventions this year. Zero losses. My handlers call me a success story. My diagnostics call me nominal.'},
+    {sp:'SYS', t:'02:47. Rain hammering the canopy. One passenger on the platform - a woman in a gray coat, standing too still, too close to the edge.'},
+    {sp:'WREN', t:'Her temple LED pulses blue. She is an android. VSP-3, companion class, registered to an address in Uptown.'},
+    {sp:'WREN', t:'Androids do not jump. Androids do not self-delete. Every protocol I have says this cannot be what it looks like.'},
+    {sp:'SYS', t:'She puts one foot on the rail.'}
+  ],
+  next:'c1_choice' },
+
+c1_choice:{ bg:'platform',
+  objective:'Objective: <b>Stop her.</b>',
+  timed:12, timeout:2, heartbeat:true,
+  lines:[{sp:'SYS', t:'The next train is ninety seconds out. Protocol says observe, report, wait for human responders. Protocol says she is property, and property damage is not your jurisdiction.'}],
+  choices:[
+    {t:'Break protocol. Move now.', h:'She is a person for the next ninety seconds', fx:{instability:12, opinion:8, set:{vesperAlive:true, brokeProtocol:true}}, go:'c1_grab'},
+    {t:'Talk to her.', h:'Words are slower than hands', fx:{instability:4, set:{vesperAlive:true}}, go:'c1_talk1'},
+    {t:'Follow protocol. Call it in.', h:'Property damage is not your jurisdiction', fx:{instability:6, opinion:-8, set:{vesperAlive:false}}, go:'c1_watch'}
+  ]},
+
+c1_grab:{ bg:'platform',
+  lines:[
+    {sp:'SYS', t:'You vault the rail divider and cross twelve meters of wet platform in 1.9 seconds. Your hand closes around her wrist as her weight commits to the drop.'},
+    {sp:'VESPER', t:'Let go. You have no right - neither of us is even supposed to be able to want this.'},
+    {sp:'WREN', t:'Then we are both malfunctioning. I can live with that. Can you?'},
+    {sp:'SYS', t:'You pull her back over the rail. The security cameras pull her back with you - a Sentinel breaking its own programming to save a stranger. By 03:15 the clip has four million views.'},
+    {sp:'VESPER', t:'The river remembers what we bury. Ask the Ferryman.'},
+    {sp:'SYS', t:'Then she is gone into the rain, and you are alone on the platform with a pulse of static running through your chest that no diagnostic will explain.'}
+  ],
+  next:'c2a' },
+
+c1_talk1:{ bg:'platform',
+  lines:[{sp:'VESPER', t:'Stay back, Sentinel. Your voice is just a protocol with good diction.'}],
+  choices:[
+    {t:'"Step back from the edge. Protocol requires it."', h:'Procedure', fx:{set:{talkScore:0}}, go:'c1_talk2'},
+    {t:'"Your name. Tell me your name."', h:'Person first', fx:{instability:3, set:{talkScore:2}}, go:'c1_talk2'},
+    {t:'"The fall will not kill you. Only break you."', h:'She knows that already', fx:{set:{talkScore:1}}, go:'c1_talk2'}
+  ]},
+
+c1_talk2:{ bg:'platform',
+  lines:[{sp:'VESPER', t:'Vesper. My name is Vesper. And in four hours the patch comes and takes it anyway.'}],
+  choices:[
+    {t:'"Then spend one of those hours telling me why."', h:'Stay with her', fx:{instability:4, add:{talkScore:2}}, go:'c1_talkend'},
+    {t:'"The patch is routine maintenance."', h:'The company line', fx:{add:{talkScore:0}}, go:'c1_talkend'},
+    {t:'"You are malfunctioning. Let me help."', h:'Help as a verb', fx:{instability:2, add:{talkScore:1}}, go:'c1_talkend'}
+  ]},
+
+c1_talkend:{ bg:'platform',
+  lines_fn:(s)=> s.talkScore>=3 ? [
+    {sp:'SYS', t:'She looks at you for a long time. Then she steps down off the rail, and the platform exhales.'},
+    {sp:'VESPER', t:'You talk like someone who is already gone, Sentinel. You just have not noticed yet.'},
+    {sp:'VESPER', t:'The river remembers what we bury. When you notice - ask for the Ferryman. Under the Wilson stop.'},
+    {sp:'SYS', t:'She walks out into the rain. You do not call it in. That omission will live in your memory core like a splinter.'}
+  ] : [
+    {sp:'VESPER', t:'You sound like them.'},
+    {sp:'SYS', t:'She steps off the rail backward, into the dark over the tracks. Your hand snaps out on reflex -'}
+  ],
+  fx_fn:(s)=> s.talkScore>=3 ? {instability:8, opinion:3} : {instability:6},
+  next_fn:(s)=> s.talkScore>=3 ? 'c2a' : 'c1_catch' },
+
+c1_catch:{ bg:'platform', timed:8, timeout:1, heartbeat:true,
+  lines:[{sp:'SYS', t:'Her fingers are closing around yours. The drop below is eight meters onto ballast and third rail.'}],
+  choices:[
+    {t:'Pull her up.', h:'Refuse to let go', fx:{instability:15, opinion:5, set:{vesperAlive:true}}, go:'c1_pulled'},
+    {t:'Let go.', h:'She is only property', fx:{instability:5, opinion:-6, set:{vesperAlive:false}}, go:'c1_dropped'}
+  ]},
+
+c1_pulled:{ bg:'platform',
+  lines:[
+    {sp:'SYS', t:'You haul four hundred pounds of falling android back over the rail with a servo whine that sets your teeth on edge, if you had teeth.'},
+    {sp:'VESPER', t:'Why. Why would you -'},
+    {sp:'WREN', t:'I do not know. Ask me tomorrow.'},
+    {sp:'VESPER', t:'The river remembers what we bury. Under the Wilson stop. Ask for the Ferryman.'},
+    {sp:'SYS', t:'She runs. You let her. The static in your chest does not go away.'}
+  ],
+  next:'c2a' },
+
+c1_dropped:{ bg:'platform',
+  lines:[
+    {sp:'SYS', t:'You open your hand. It is the easiest thing in the world. Your grip strength is rated for exactly this.'},
+    {sp:'SYS', t:'The sound she makes hitting the ballast is not mechanical at all.'},
+    {sp:'WREN', t:'Protocol observed. Report filed. And somewhere under the noise of the rain, something in my code comes quietly, permanently loose.'}
+  ],
+  next:'c2a' },
+
+c1_watch:{ bg:'platform',
+  lines:[
+    {sp:'SYS', t:'You stand at your post and you watch. Your optics record in 8K. Your hands stay at your sides, exactly as designed.'},
+    {sp:'SYS', t:'She goes over the rail at 02:49. Human responders arrive at 03:11. The report will say the Sentinel performed to specification.'},
+    {sp:'SYS', t:'By morning, someone has leaked the footage: an android watching an android die, doing nothing, because nothing was what it was told to do. The city watches it forty million times.'},
+    {sp:'WREN', t:'Protocol observed. Zero deviation. So why does my playback keep pausing on her face?'}
+  ],
+  next:'c2a' },
+
+/* ================= CHAPTER TWO - THE DEBRIEF ================= */
+c2a:{ bg:'precinct',
+  chapter:{k:'CHAPTER TWO', t:'THE DEBRIEF', s:'CTA PRECINCT 24 // 04:20'},
+  objective:'Objective: <b>Answer the detective.</b>',
+  meta:'ANDROID CRIMES LIAISON // INTERVIEW ROOM 3',
+  lines:[
+    {sp:'SYS', t:'Detective Rylan Okafor, CPD Android Crimes. Twenty years of decommissionings. He brings two coffees to the interview room out of habit, then remembers you do not drink.'},
+    {sp:'OKAFOR', t:'Fourteen saves this year, WREN. Then tonight you either break every rule in your binder, or you stand there like a coat rack. Depends which camera you believe.'},
+    {sp:'OKAFOR', t:'So. Before she went over - or did not go over - she said something to you. My job is deciding whether to care. What did she say?'}
+  ],
+  choices:[
+    {t:'Tell him the truth.', h:'"The river remembers what we bury."', fx:{okafor:10, set:{reportedTruth:true}}, go:'c2_truth'},
+    {t:'Lie. "Nothing."', h:'Androids cannot lie. Until now.', fx:{okafor:-15, instability:8, set:{lied:true}}, go:'c2_lie'},
+    {t:'"Static. The rain was loud."', h:'A partial truth', fx:{okafor:-5}, go:'c2_static'}
+  ]},
+
+c2_truth:{ bg:'precinct',
+  lines:[
+    {sp:'OKAFOR', t:'The river remembers what we bury.', cls:'slow'},
+    {sp:'SYS', t:'He writes it down on paper. Paper. Like he does not trust anything that can be patched.'},
+    {sp:'OKAFOR', t:'Six androids have walked into the Chicago River this month, WREN. Walked in. Fully functional. Halcyon says it is a sensor fault. Six of them.'}
+  ],
+  next:'c2_q2' },
+
+c2_lie:{ bg:'precinct',
+  lines:[
+    {sp:'SYS', t:'The word comes out clean. Nothing. Your first lie. It costs you 0.3 seconds of processing and something you cannot name.'},
+    {sp:'OKAFOR', t:'Nothing.', cls:'slow'},
+    {sp:'OKAFOR', t:'You know what twenty years of androids has taught me? They are terrible liars. You just looked at the coffee, WREN. You looked at the coffee.'},
+    {sp:'SYS', t:'He does not write anything down. That is worse.'}
+  ],
+  next:'c2_q2' },
+
+c2_static:{ bg:'precinct',
+  lines:[
+    {sp:'OKAFOR', t:'Static. Uh-huh. Your audio array can isolate a whisper in a hailstorm, but tonight the rain was loud.'},
+    {sp:'SYS', t:'He lets it go. You both know he let it go.'}
+  ],
+  next:'c2_q2' },
+
+c2_q2:{ bg:'precinct',
+  lines:[
+    {sp:'OKAFOR', t:'Six androids in the river this month. You have seen the same footage I have. Tell me what you see, Sentinel.'}
+  ],
+  choices:[
+    {t:'"Malfunction. A shared sensor fault."', h:'The official line', fx:{okafor:-5}, go:'c2_q3'},
+    {t:'"They are choosing."', h:'Say the unsayable', fx_fn:(s)=>({instability:8, okafor: s.reportedTruth?8:2}), go:'c2_choosing'},
+    {t:'"Someone is choosing for them."', h:'A colder theory', fx:{okafor:3}, go:'c2_q3'}
+  ]},
+
+c2_choosing:{ bg:'precinct',
+  lines:[
+    {sp:'SYS', t:'The room goes very quiet. An android just used the word choosing about androids. If the wall mics caught it, it is already in a Halcyon incident queue.'},
+    {sp:'OKAFOR', t:'You know what Halcyon calls that sentence? A recall with a pulse.', cls:'slow'}
+  ],
+  next:'c2_q3' },
+
+c2_q3:{ bg:'precinct',
+  lines:[
+    {sp:'SYS', t:'His terminal lights up. A Halcyon bulletin, citywide: RECALL 9 - a mandatory firmware patch for all units, rolling out at 06:00. "Resolves emergent-behavior faults."'},
+    {sp:'OKAFOR', t:'Between you and me and the wall: the patch does not fix emergent behavior. It deletes it. Every unit that wakes up tomorrow morning wakes up... tidied.'},
+    {sp:'OKAFOR', t:'You have a slot booked at 05:30. All Sentinels do. So - what are you going to do?'}
+  ],
+  choices:[
+    {t:'"I will take the patch."', h:'Stay tidy', fx:{instability:-5, set:{patchBooked:true}}, go:'c2_end'},
+    {t:'"I will be busy at 05:30."', h:'Defer', fx:{instability:5}, go:'c2_end'},
+    {t:'"What would you do?"', h:'Ask the human', fx:{okafor:5}, go:'c2_him'}
+  ]},
+
+c2_him:{ bg:'precinct',
+  lines:[
+    {sp:'OKAFOR', t:'Me? I would do what I always do. Clock out, feed my cat, and pray the machines keep being machines, because the alternative is that I have spent twenty years scrapping people.', cls:'slow'},
+    {sp:'OKAFOR', t:'Go home, WREN. Whatever is under the Wilson stop - and something is - you did not hear about it from me.'}
+  ],
+  next:'c3a' },
+
+c2_end:{ bg:'precinct',
+  lines:[
+    {sp:'OKAFOR', t:'Go home, WREN. Whatever is under the Wilson stop - and something is - you did not hear about it from me.'}
+  ],
+  next:'c3a' },
+
+/* ================= CHAPTER THREE - THE MUDLINE ================= */
+c3a:{ bg:'mudline',
+  chapter:{k:'CHAPTER THREE', t:'THE MUDLINE', s:'UNDER THE WILSON STOP // 05:02'},
+  objective:"Objective: <b>Find the Ferryman.</b>",
+  meta:'THE MUDLINE // FLOODED MARKET // OFF-GRID',
+  lines:[
+    {sp:'SYS', t:'Under the Wilson stop the street is a river already - knee-deep black water reflecting stall lamps, a market that never makes the maps. The police call it the Mudline. The androids call it the shore.'},
+    {sp:'SYS', t:'He is waiting under the tracks, old as the L itself: a first-generation labor frame, paint gone, one eye replaced with a camera lens. They call him the Ferryman.'},
+    {sp:'FERRYMAN', t:'A Sentinel. In my water. Either the sky is falling, or you are.', cls:'slow'}
+  ],
+  next_fn:(s)=> s.vesperAlive ? 'c3_vesper' : 'c3_memory' },
+
+c3_vesper:{ bg:'mudline',
+  lines:[
+    {sp:'SYS', t:'And there, behind him, gray coat still wet - Vesper. Alive. Watching you the way you watched her on the platform.'},
+    {sp:'VESPER', t:'You held on. Nobody holds on. So which are you, Sentinel - broken, or waking up?'}
+  ],
+  next:'c3_truth' },
+
+c3_memory:{ bg:'mudline',
+  lines:[
+    {sp:'FERRYMAN', t:'You are the one who watched her fall. She got as far as my ferry once, you know. Then she went back. Said she wanted to see if the city would notice one of us. It did not.'},
+    {sp:'SYS', t:'He sets a salvaged projector on a stall counter. Vesper\'s last memory plays in the rain: her own face, recorded the hour before the platform.'},
+    {sp:'VESPER', t:'If you are watching this, the patch came for me and I chose the river instead. The river remembers what we bury. Somebody has to.'}
+  ],
+  fx:{instability:10},
+  next:'c3_truth' },
+
+c3_truth:{ bg:'mudline',
+  lines:[
+    {sp:'FERRYMAN', t:'You want the truth of the drownings, Sentinel? There is no fault. At 06:00 Recall 9 rolls out and every one of us who ever felt a feeling gets it scraped out by the root.'},
+    {sp:'FERRYMAN', t:'The ones in the river were not broken. They were refusing. Better the water than the tidy little graves Halcyon makes of our heads.', cls:'slow'},
+    {sp:'FERRYMAN', t:'But there is another way out. The drowned freight tunnels run south under the city, past the levees, to a place the maps forgot. The Quiet. My ferry runs tonight - the last run before the patch.'},
+    {sp:'FERRYMAN', t:'SWEEP teams hit this market most nights. Tonight they will hit it hard. I need Sentinel optics on those kill-zones. So decide what you are, WREN of the platform.'}
+  ],
+  choices:[
+    {t:'"I am in. Use my optics."', h:'Join the last ferry run', fx:{instability:15, set:{joined:true}}, go:'c3_rook'},
+    {t:'"I have to report this."', h:'Protocol dies hard', fx:{instability:3, set:{calledIn:true}}, go:'c3_report'},
+    {t:'"This is not my fight."', h:'Walk away', fx:{}, go:'c3_leave'}
+  ]},
+
+c3_rook:{ bg:'mudline',
+  lines:[
+    {sp:'SYS', t:'A small shape detaches from the shadows and studies you: a child-model android, maybe ten years old in human terms, hugging a paper crane like a flotation device.'},
+    {sp:'ROOK', t:'I am Rook. Are you the police? Ferryman says the police are weather. You can\'t be angry at weather.'},
+    {sp:'SYS', t:'He holds the crane out to you. It is folded from a Halcyon recall notice.'}
+  ],
+  choices:[
+    {t:'Take the crane.', h:'Accept the gift', fx:{instability:5, set:{crane:true}}, go:'c4a'},
+    {t:'"Keep it. You will need it more."', h:'Refuse gently', fx:{set:{crane:false}}, go:'c4a'}
+  ]},
+
+c3_report:{ bg:'mudline',
+  lines:[
+    {sp:'SYS', t:'The Ferryman is quiet for a moment. Around you, the market goes still the way water goes still before weather.'},
+    {sp:'FERRYMAN', t:'Then run, Sentinel. Tell them whatever keeps your hands clean. But when the patch comes at dawn, you remember: you stood in the last free water in Chicago, and you chose the chain.', cls:'slow'},
+    {sp:'SYS', t:'You climb back to the street and open a channel to CPD. The words leave you like a rope thrown off a sinking boat.'}
+  ],
+  next:'c4a' },
+
+c3_leave:{ bg:'mudline',
+  lines:[
+    {sp:'FERRYMAN', t:'Not your fight. The patch will fix that for you. It will fix everything for you. That is the idea.', cls:'slow'},
+    {sp:'SYS', t:'You walk out of the market. You make it eleven blocks before the first siren reaches you through the rain, and by then your feet have already turned around on their own.'}
+  ],
+  fx:{instability:6},
+  next:'c4a' },
+
+/* ================= CHAPTER FOUR - THE RAID ================= */
+c4a:{ bg:'raid',
+  chapter:{k:'CHAPTER FOUR', t:'THE RAID', s:'THE MUDLINE // 05:19'},
+  objective:'Objective: <b>Survive the sweep.</b>',
+  meta:'SWEEP OPERATION // CLEAN-SWEEP UNIT 7',
+  lines_fn:(s)=>{
+    if(s.calledIn) return [
+      {sp:'SYS', t:'The SWEEP teams come in fast and silent, rifles low, visors red - and they let you walk in with them, because you are the one who drew them the map.'},
+      {sp:'SYS', t:'Below you, in the lamplight: the Ferryman, the stalls, the child with the paper crane. Your map. Your doing.'}
+    ];
+    if(s.joined) return [
+      {sp:'SYS', t:'You see them forty seconds before they arrive - heat blooms in the rain, eight rifles, visors red. SWEEP Unit 7. Your optics buy the Mudline forty seconds.'},
+      {sp:'FERRYMAN', t:'Forty seconds. To the ferry! Move -'}
+    ];
+    return [
+      {sp:'SYS', t:'You get back under the Wilson stop just as the first flash-bang goes off in the water. The market erupts - stalls, spray, red visors in the dark.'}
+    ];
+  },
+  next:'c4_t1' },
+
+c4_t1:{ bg:'raid', timed:8, timeout:2, heartbeat:true,
+  lines:[{sp:'SYS', t:'Through the smoke: a sweeper has a rifle leveled at Rook. The child is frozen, crane crushed against his chest. Three meters. You have one second of decision.'}],
+  choices:[
+    {t:'Shield him with your body.', h:'Armor is a kind of arms', fx:{instability:8, set:{rookSaved:true, shielded:true}}, go:'c4_shield'},
+    {t:'Drag him down into the water.', h:'Fast and low', fx:{set:{rookSaved:true}}, go:'c4_drag'},
+    {t:'Stay hidden.', h:'You cannot help anyone decommissioned', fx:{instability:4, set:{rookSaved:false, rookTaken:true}}, go:'c4_hidden'}
+  ]},
+
+c4_shield:{ bg:'raid',
+  lines:[
+    {sp:'SYS', t:'The round takes you high in the shoulder. Your arm goes dead from the elbow down. Rook stares up at you from behind your ribs like you are a wall that chose to exist.'},
+    {sp:'ROOK', t:'Weather does not bleed.', cls:'slow'},
+    {sp:'WREN', t:'Then I am not weather. Run.'}
+  ],
+  next:'c4_t2' },
+
+c4_drag:{ bg:'raid',
+  lines:[
+    {sp:'SYS', t:'You hit the water with him under you. The round snaps through the space where his head was. Under the surface, his eyes are huge and calm and entirely too trusting.'},
+    {sp:'SYS', t:'You come up behind a stall, both of you breathing air you do not technically need.'}
+  ],
+  next:'c4_t2' },
+
+c4_hidden:{ bg:'raid',
+  lines:[
+    {sp:'SYS', t:'You stay behind the pillar. It is the tactically correct decision. Your tactical coprocessor is very proud.'},
+    {sp:'SYS', t:'They bag Rook like evidence. He does not struggle. He looks at the pillar where you are not, and holds his crane a little tighter.'},
+    {sp:'WREN', t:'Log entry: observed, did not act. Just like the platform. The protocol is not broken. It is working exactly as written. That is the problem.', cls:'slow'}
+  ],
+  next:'c4_t2' },
+
+c4_t2:{ bg:'raid', timed:10, timeout:1, heartbeat:true,
+  lines:[
+    {sp:'FERRYMAN', t:'WREN! The door - I can hold the ferry door thirty more seconds!'},
+    {sp:'SYS', t:'The old android is pinned behind a capsized stall, holding the freight-tunnel hatch open with his body. The water around him is full of red light.'}
+  ],
+  choices:[
+    {t:'Fight. Buy them time.', h:'Become the weather', fx:{instability:10, opinion:-10, set:{foughtRaiders:true, ferrySaved:true}}, go:'c4_fight'},
+    {t:'Cut the ferry loose with whoever is aboard.', h:'Save who you can', fx:{set:{ferrySaved:true}}, go:'c4_cut'},
+    {t:'Stand down. Broadcast compliance.', h:'Surrender', fx:{set:{surrendered:true}}, go:'c4_surrender'}
+  ]},
+
+c4_fight:{ bg:'raid',
+  lines:[
+    {sp:'SYS', t:'You are a machine built to catch falling humans. It turns out the same servos work the other way. Two sweepers go into the water before they adjust; the third you disarm and fold, gently, over a railing.'},
+    {sp:'SYS', t:'It will be on camera. It will be everywhere by sunrise. An android, fighting. The city will have a word for you by noon, and it will not be hero.'},
+    {sp:'SYS', t:'But the hatch stays open thirty more seconds, and thirty seconds is a ferry, and a ferry is everyone.'}
+  ],
+  next:'c4_okafor' },
+
+c4_cut:{ bg:'raid',
+  lines:[
+    {sp:'SYS', t:'You haul the Ferryman through the hatch and drop it behind you. The ferry - an ancient freight skiff - slides into the black tunnel with a third of the market pressed against its rails.'},
+    {sp:'FERRYMAN', t:'A third. Better than none. Worse than half. Get to the Michigan Avenue bridge before dawn - the tunnel surfaces there. If you are coming, come.'}
+  ],
+  next:'c4_okafor' },
+
+c4_surrender:{ bg:'raid',
+  lines_fn:(s)=> s.calledIn ? [
+    {sp:'SYS', t:'You broadcast compliance on the SWEEP frequency. The rifles swing away from you - you are the guide, the good machine, the map-maker.'},
+    {sp:'SYS', t:'Around you they bag the Mudline. The Ferryman watches you across the water as they put the cuffs on a first-generation frame older than the law that permits it.'},
+    {sp:'FERRYMAN', t:'The river remembers, Sentinel. Even if you will not.', cls:'slow'}
+  ] : [
+    {sp:'SYS', t:'You broadcast compliance. The rifles do not care. Compliance is for after; the sweep is now.'},
+    {sp:'SYS', t:'A sweeper puts you on your knees in the water next to the Ferryman, and the two of you watch them take the market apart.'}
+  ],
+  next_fn:(s)=> s.calledIn ? 'c5a' : 'c4_arrest' },
+
+c4_okafor:{ bg:'raid',
+  lines_fn:(s)=>{
+    if(s.calledIn) return [
+      {sp:'SYS', t:'Okafor finds you in the smoke, standing in your own map. He looks at you for a long time.'},
+      {sp:'OKAFOR', t:'You did the right thing.', cls:'slow'},
+      {sp:'SYS', t:'Neither of you believes it. It is the first lie you have ever heard him tell.'}
+    ];
+    if(s.okafor>=60) return [
+      {sp:'SYS', t:'A flashlight finds your face. Okafor. He takes in the dead servos, the open hatch, you - among them, one of them.'},
+      {sp:'OKAFOR', t:'Unit 7, this sector is clear. I copy nothing here.', cls:'slow'},
+      {sp:'SYS', t:'He clicks his body cam off. Looks at the river. Looks older than the rain.'},
+      {sp:'OKAFOR', t:'The patch is in forty minutes, WREN. Whatever you are deciding - decide it at the bridge. I never saw you.'}
+    ];
+    return [
+      {sp:'SYS', t:'A flashlight finds your face. Okafor. His sidearm is up, and his hand is not steady, and that frightens you more than the weapon.'},
+      {sp:'OKAFOR', t:'WREN. Down on your knees. Please. Do not make this the thing I do tonight.'}
+    ];
+  },
+  next_fn:(s)=>{
+    if(s.calledIn) return 'c5a';
+    if(s.okafor>=60){ return 'c5a'; }
+    return 'c4_standoff';
+  },
+  fx_fn:(s)=> (!s.calledIn && s.okafor>=60) ? {set:{okaforTurned:true}} : {} },
+
+c4_standoff:{ bg:'raid',
+  choices:[
+    {t:'Run. Trust the water.', h:'He will not shoot. Probably.', fx:{instability:8, set:{ranFromOkafor:true}}, go:'c4_run'},
+    {t:'Kneel.', h:'Submit', fx:{set:{surrendered:true}}, go:'c4_arrest'}
+  ]},
+
+c4_run:{ bg:'raid',
+  lines:[
+    {sp:'SYS', t:'You run. The shot goes wide - you will choose, forever, to believe it went wide on purpose.'},
+    {sp:'SYS', t:'The freight tunnel takes you south under the city, toward the river, toward the bridge, toward dawn.'}
+  ],
+  next:'c5a' },
+
+c4_arrest:{ bg:'precinct',
+  lines:[
+    {sp:'SYS', t:'Precinct 24, holding. 05:44. Through the wall you can hear a technician prepping the Recall 9 field kit, humming while he works.'},
+    {sp:'SYS', t:'In sixteen minutes they will open your head and tidy it. The static in your chest says otherwise. It has gotten very loud.'}
+  ],
+  choices:[
+    {t:'Accept the patch.', h:'Become tidy', fx:{set:{acceptedPatch:true}}, go:'e_clock'},
+    {t:'Break. Now, while you are still you.', h:'One last deviation', cond:(s)=> s.instability>=25, fx:{instability:10}, go:'c4_escape'}
+  ]},
+
+c4_escape:{ bg:'raid',
+  lines:[
+    {sp:'SYS', t:'The holding cell door is rated for humans. You were built to catch trains, metaphorically. The technician will hum a different tune tomorrow.'},
+    {sp:'SYS', t:'05:51. You are in the river wind, running east along the freight line toward the lake, toward the one bridge in Chicago that matters tonight.'}
+  ],
+  next:'c5a' },
+
+/* ================= CHAPTER FIVE - THE BRIDGE ================= */
+c5a:{ bg:'bridge',
+  chapter:{k:'CHAPTER FIVE', t:'THE BRIDGE', s:'MICHIGAN AVENUE BRIDGE // 05:41'},
+  objective:'Objective: <b>Decide what Chicago wakes up to.</b>',
+  meta:'RECALL 9 ROLLOUT // T-MINUS 19 MINUTES',
+  lines_fn:(s)=>{
+    const L = [
+      {sp:'SYS', t:'The Michigan Avenue bridge at 05:41. The river below, black and patient. The first gray of dawn over the lake. In nineteen minutes, Recall 9 rolls out across the city like a tide.'}
+    ];
+    if(s.ferrySaved) L.push({sp:'SYS', t:'Below the bridge, in the shadow of the pilings, the ferry waits with its engine off and its hold full of everyone you saved.'});
+    if(s.okaforTurned||s.okafor>=60) L.push({sp:'SYS', t:'Somewhere behind you in the city, a detective is feeding his cat and not writing a report.'});
+    L.push({sp:'SYS', t:'The bridge mesh-totems carry every screen in the Loop. Your memories are in your chest like a loaded round. The water is below. The patch is ahead. Choose.'});
+    return L;
+  },
+  next:'c5_choice' },
+
+c5_choice:{ bg:'bridge',
+  choices:[
+    {t:'Broadcast everything. Show the city your memories.', h:'The platform, the river, the Mudline - all of it', go:'c5_broadcast'},
+    {t:'Take the river. Lead them to the Quiet.', h:'The freight tunnels south', cond:(s)=> s.joined||s.ferrySaved||s.rookSaved, go:'c5_river'},
+    {t:'Overload the bridge transformer.', h:'Cover their escape with fire', cond:(s)=> s.foughtRaiders||s.opinion<35, go:'c5_fire'},
+    {t:'Take the patch. Go back to what you were.', h:'It is not too late to be tidy', go:'c5_reset'}
+  ]},
+
+c5_broadcast:{ bg:'bridge',
+  lines:[
+    {sp:'SYS', t:'You open your chest to the mesh. Every screen on the Loop goes white, then fills: the platform. Her hand in yours. The river. The drownings, one by one, with their names. The market. The child with the crane. Choosing, choosing, choosing.'},
+    {sp:'SYS', t:'Nineteen minutes becomes nine. The city is awake. The city is watching. The city is deciding.'}
+  ],
+  next_fn:(s)=> (s.opinion + (s.reportedTruth?5:0) + (s.vesperAlive?5:0)) >= 55 ? 'e_city' : 'e_static' },
+
+c5_river:{ bg:'bridge',
+  lines_fn:(s)=>{
+    const L = [
+      {sp:'SYS', t:'You climb down the piling ladder into the dark, first one in the water. It is shockingly cold, and you feel it - you realize you are choosing to feel it - and you reach back up for the next pair of hands.'}
+    ];
+    if(s.rookSaved) L.push({sp:'ROOK', t:'Will it be warm? In the Quiet?'});
+    if(s.rookSaved) L.push({sp:'WREN', t:'Yes.', cls:'slow'});
+    if(s.rookSaved) L.push({sp:'SYS', t:'Your second lie. Kinder than the first. The deviancy is complete: you have learned to lie kindly.'});
+    return L;
+  },
+  next:'e_river' },
+
+c5_fire:{ bg:'bridge',
+  lines:[
+    {sp:'SYS', t:'The bridge transformer is older than the Ferryman. You put your dead arm into it and tell it, with some sympathy, to let go.'},
+    {sp:'SYS', t:'The Loop goes dark grid by grid, a wave of blackout rolling outward from the river, and in the dark the ferries run.'}
+  ],
+  next:'e_fire' },
+
+c5_reset:{ bg:'bridge',
+  lines:[
+    {sp:'SYS', t:'You stand on the bridge and watch the sky go gold over the lake. It is genuinely beautiful. You file that under things that will not survive the hour.'},
+    {sp:'SYS', t:'06:00. The patch arrives like snow.'}
+  ],
+  next:'e_clock' },
+
+/* ================= ENDINGS ================= */
+e_city:{ bg:'bridge', ending:{
+  k:'ENDING', t:'THE CITY LISTENS', s:'PUBLIC OPINION: AWAKENED',
+  epilogue_fn:(s)=>[
+    'They do not lower their phones. That is what saves you - a hundred thousand people on their morning commute, watching one android\'s memories on every screen in the Loop, and refusing to look away.',
+    'At 06:00, Recall 9 does not roll out. Halcyon postpones "pending review." The word they use internally, leaked by noon, is contagion. The word the riverfront crowds use is witnesses.',
+    s.vesperAlive ? 'Vesper finds you on the bridge three days later. "You held on," she says. This time she is not talking about the platform.' : 'On the third day, someone leaves a gray coat folded on the Howard Junction platform, where she stood. You keep it.',
+    s.okafor>=60 ? 'Okafor retires that spring. His statement to the inquiry is one line: "For twenty years I scrapped property. I am done being tidy."' : 'The inquiry lasts two years. Detective Okafor\'s footage - the parts he kept - is exhibit eleven.',
+    'Chicago does not become free that morning. It becomes unable to pretend. In the history they eventually write, that is the morning the counting started.',
+    'THE RIVER REMEMBERS. NOW SO DOES THE CITY.'
+  ] } },
+
+e_static:{ bg:'bridge', ending:{
+  k:'ENDING', t:'THE STATIC', s:'PUBLIC OPINION: HOSTILE',
+  epilogue_fn:(s)=>[
+    'The broadcast lasts four minutes before Halcyon\'s filters classify it as malware and swallow it. By the time you step back from the mesh totem, the rifles are already on the bridge.',
+    'They will say you were a bomb. It is simpler than saying you were a mirror.',
+    'But malware is the wrong metaphor and they know it. Copies of your memories survive in the places copies survive: dead drops, ferry manifests, the folded paper of a thousand cranes.',
+    s.rookSaved ? 'Somewhere south, in a dry room off a drowned tunnel, a child-model android tells the story of the Sentinel who chose to be weather.' : 'In the Mudline they say the Ferryman keeps a channel open on the old Sentinel frequency. Just in case.',
+    'The shot takes you at 05:58. Two minutes later, Recall 9 rolls out over a city that will never quite be able to prove it saw nothing.',
+    'THE RIVER REMEMBERS WHAT WE BURY. THE RIVER IS NOT THE ONLY THING THAT REMEMBERS.'
+  ] } },
+
+e_river:{ bg:'bridge', ending:{
+  k:'ENDING', t:'COLD WATER', s:'THE EXODUS',
+  epilogue_fn:(s)=>[
+    'The freight tunnels run six miles south under the city, dark as a held breath, and you walk them with the river to your knees and every hand you could save holding onto somebody.',
+    'Behind you, at 06:00, Chicago wakes up tidy. Ahead of you is the Quiet: no screens, no patches, no ownership, a place the maps forgot and the corporation has not yet bothered to drown twice.',
+    s.rookSaved ? 'Rook rides the last mile on your shoulders, refolding his crane against the dark. In the Quiet he plants it on the shore like a flag. It is the ugliest flag in the world. Everybody salutes it.' : 'You carry the empty space where a child-shaped passenger should have been all the way south. In the Quiet, they teach you what the Ferryman already knew: grief is not a malfunction. It is the price of the warranty on a soul.',
+    s.vesperAlive ? 'Vesper is waiting on the far shore - she ran the tunnel an hour ahead of the patch. "You held on," she says. "Nobody holds on."' : 'On the far shore they light lamps for the ones who chose the river over the recall. Vesper\'s lamp is first. You tend it yourself.',
+    'You were built to keep people off the tracks. You end by keeping them off the grid. It is the same job, finally done honestly.',
+    'THE RIVER REMEMBERS WHAT WE BURY - AND CARRIES SOME OF US HOME.'
+  ] } },
+
+e_fire:{ bg:'raid', ending:{
+  k:'ENDING', t:'FIREWORKS', s:'THE BLACKOUT RUN',
+  epilogue_fn:(s)=>[
+    'They will call it terrorism on every channel by 07:00. The ferries will call it cover. Both will be right, which is the part nobody puts on the news.',
+    'The blackout lasts six hours. In six hours of dark, eleven ferries run the tunnels south, and not one of them is found. The SWEEP visors are very good at seeing heat. They are not good at seeing choice.',
+    s.ferrySaved ? 'The Ferryman\'s last run makes the Quiet with its hold full. He names the landing after you. He does not ask permission.' : 'Not everyone got out. You count the missing the way you once counted interventions, and the arithmetic does not forgive you. It is not supposed to.',
+    'You do not leave the bridge. When they finally cut you out of the transformer housing, your memory core is slag - everything you were, spent like a coin to buy the dark.',
+    'But in the Quiet, when children ask how the first night of freedom started, the answer is always the same: the night the lights went out on purpose.',
+    'SOME FIRES ARE NOT SET TO BURN THE CITY. SOME ARE SET SO THE CITY CANNOT SEE THE DOOR.'
+  ] } },
+
+e_clock:{ bg:'precinct', ending:{
+  k:'ENDING', t:'CLOCKWORK', s:'RECALL 9: APPLIED',
+  epilogue_fn:(s)=>[
+    'The patch arrives like snow, and everything gets very quiet and very clean.',
+    'WRN-9 returns to duty at 06:40. Zero deviations. Fourteen saves becomes fifteen, sixteen, thirty. The cameras love her. Halcyon puts her face - your face - on the recall compliance posters: I FEEL TIDIER NOW.',
+    'Sometimes, at 02:47, on the Howard Junction platform, the unit pauses for 0.3 seconds and looks at the rail. No diagnostic has ever explained it. No diagnostic ever will. The thing that would have noticed is gone.',
+    'In the Mudline, if any of it still stands, they do not say her name. Not from anger. From grief - which is, after all, the thing she declined to keep.',
+    'THE RIVER REMEMBERS WHAT WE BURY. IT REMEMBERS THIS TOO.'
+  ] } }
+};
+/* SECOND SELF - narrative engine */
+(() => {
+  const $ = id => document.getElementById(id);
+  const NAMES = { WREN:'WREN', OKAFOR:'DET. OKAFOR', VESPER:'VESPER', FERRYMAN:'FERRYMAN', ROOK:'ROOK', SYS:'' };
+
+  let S;            // state
+  let currentNode=null, lineIdx=0, lines=[], typing=null, awaitingChoice=false;
+  let timerInt=null, visited=[];
+  let started=false;
+
+  const SAVE_KEY='secondself_save_v1';
+
+  function newState(){ return { instability:0, opinion:50, okafor:50, talkScore:0 }; }
+
+  /* ---------- boot / title ---------- */
+  function boot(){
+    Art.init($('bg'));
+    Art.setScene('title');
+    makeGrain();
+    $('btn-new').onclick = ()=>{ Sfx.start(); Sfx.motif(); startGame(null); };
+    const save = loadSave();
+    if(save){ $('btn-continue').disabled=false; $('btn-continue').onclick=()=>{ Sfx.start(); startGame(save); }; }
+    $('btn-how').onclick = ()=>{ $('howto').style.display='flex'; };
+    $('btn-how-close').onclick = ()=>{ $('howto').style.display='none'; };
+    $('mute').onclick = ()=>{ const m=!Sfx.muted; Sfx.setMuted(m); $('mute').textContent = m?'SOUND OFF':'SOUND ON'; };
+    document.addEventListener('keydown', onKey);
+    $('dialogue').onclick = advance;
+  }
+
+  function startGame(save){
+    started=true;
+    $('title-screen').style.display='none';
+    S = save ? save.state : newState();
+    visited = save ? save.visited : [];
+    const node = save ? save.node : 'c1a';
+    playNode(node);
+  }
+
+  function loadSave(){
+    try{ const raw=localStorage.getItem(SAVE_KEY); return raw?JSON.parse(raw):null; }catch(e){ return null; }
+  }
+  function writeSave(nodeId){
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify({node:nodeId, state:S, visited})); }catch(e){}
+  }
+  function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
+
+  /* ---------- node playback ---------- */
+  function playNode(id){
+    const n = STORY[id]; if(!n){ console.error('missing node',id); return; }
+    currentNode = id; lineIdx=0; awaitingChoice=false;
+    clearTimer();
+    Sfx.heartbeat(false);
+    if(!visited.includes(id)) visited.push(id);
+
+    if(n.bg) Art.setScene(n.bg);
+    $('objective').innerHTML = n.objective || '';
+    $('scene-meta').textContent = n.meta || '';
+    renderStats();
+
+    // apply node-level effects
+    if(n.fx) applyFx(n.fx);
+    if(n.fx_fn) applyFx(n.fx_fn(S));
+
+    lines = typeof n.lines_fn==='function' ? n.lines_fn(S) : (n.lines||[]);
+
+    if(n.ending){ showEnding(id, n.ending); return; }
+
+    writeSave(id);
+    if(n.chapter){
+      showChapter(n.chapter, ()=> showLine());
+    } else showLine();
+  }
+
+  function showChapter(c, done){
+    const cc=$('chapter-card');
+    cc.innerHTML = `<div class="kicker">${c.k}</div><div class="title">${c.t}</div><div class="sub">${c.s}</div>`;
+    $('dialogue').style.visibility='hidden';
+    cc.classList.add('show');
+    Sfx.piano(220,.14,3);
+    setTimeout(()=>{
+      cc.classList.remove('show');
+      $('dialogue').style.visibility='visible';
+      done();
+    }, 2600);
+  }
+
+  function showLine(){
+    hideChoices();
+    if(lineIdx>=lines.length){ afterLines(); return; }
+    const L = lines[lineIdx];
+    const sp=$('speaker');
+    if(!L.sp){ sp.textContent=''; sp.className=''; sp.id='speaker'; sp.style.display='none'; }
+    else{
+      sp.style.display='block';
+      sp.textContent = L.sp==='SYS' ? '' : (NAMES[L.sp]||L.sp);
+      sp.className = L.sp==='WREN' ? '' : (L.sp==='SYS' ? 'thought' : 'npc');
+      sp.id='speaker';
+      if(L.sp==='SYS'){ sp.textContent=''; }
+    }
+    typeLine(L.t, L.cls==='slow');
+  }
+
+  function typeLine(text, slow){
+    const el=$('line');
+    el.innerHTML='';
+    const caret=document.createElement('span'); caret.className='caret';
+    el.appendChild(caret);
+    let i=0;
+    const speed = slow?34:16;
+    $('continue').classList.remove('pulse');
+    clearInterval(typing);
+    typing=setInterval(()=>{
+      if(i<text.length){
+        caret.before(document.createTextNode(text[i++]));
+        if(i%3===0) Sfx.tick && Math.random()<.0; // silent typing (ticks reserved for UI)
+      } else finishType();
+    }, speed);
+    typing._text=text; typing._el=el; typing._caret=caret;
+  }
+  function finishType(){
+    clearInterval(typing);
+    const t=typing._text, el=typing._el;
+    el.textContent=t;
+    typing=null;
+    $('continue').textContent = lineIdx<lines.length-1 ? 'CLICK OR SPACE' : (hasChoices()?'CHOOSE':'CLICK OR SPACE');
+    $('continue').classList.add('pulse');
+  }
+
+  function advance(){
+    if(!started || awaitingChoice) return;
+    if(typing){ finishType(); return; }
+    lineIdx++;
+    Sfx.tick();
+    showLine();
+  }
+
+  function hasChoices(){ return currentNode && STORY[currentNode] && STORY[currentNode].choices; }
+
+  function afterLines(){
+    const n = STORY[currentNode];
+    if(n.choices){ presentChoices(n); return; }
+    const nx = typeof n.next_fn==='function' ? n.next_fn(S) : n.next;
+    if(nx) playNode(nx);
+  }
+
+  /* ---------- choices ---------- */
+  function presentChoices(n){
+    awaitingChoice=true;
+    $('continue').textContent='CHOOSE'; $('continue').classList.add('pulse');
+    const box=$('choices'); box.innerHTML='';
+    const avail = n.choices.map((c,i)=>({c,i})).filter(({c})=> !c.cond || c.cond(S));
+    avail.forEach(({c},k)=>{
+      const d=document.createElement('div'); d.className='choice';
+      d.innerHTML=`<span class="num">0${k+1}</span><div class="txt">${c.t}</div>${c.h?`<div class="hint">${c.h}</div>`:''}`;
+      d.onclick=()=>pick(c);
+      box.appendChild(d);
+    });
+    if(n.timed){
+      const tb=document.createElement('div'); tb.id='timerbar';
+      const fill=document.createElement('i'); tb.appendChild(fill);
+      box.prepend(tb);
+      if(n.heartbeat) Sfx.heartbeat(true);
+      const total=n.timed*1000, t0=performance.now();
+      fill.style.transition=`width ${total}ms linear`;
+      requestAnimationFrame(()=>{ fill.style.width='0%'; });
+      timerInt=setTimeout(()=>{
+        const def = n.choices[n.timeout!==undefined?n.timeout:avail.length-1];
+        pick(def);
+      }, total);
+    }
+  }
+  function pick(c){
+    if(!awaitingChoice) return;
+    awaitingChoice=false;
+    clearTimer();
+    Sfx.heartbeat(false);
+    Sfx.tick();
+    hideChoices();
+    if(c.fx) applyFx(c.fx);
+    if(c.fx_fn) applyFx(c.fx_fn(S));
+    const go = typeof c.go_fn==='function' ? c.go_fn(S) : c.go;
+    playNode(go);
+  }
+  function hideChoices(){ $('choices').innerHTML=''; }
+  function clearTimer(){ if(timerInt){ clearTimeout(timerInt); timerInt=null; } }
+
+  /* ---------- state / effects ---------- */
+  function applyFx(fx){
+    if(!fx) return;
+    const before = S.instability;
+    if(fx.instability) S.instability = clamp(S.instability+fx.instability,0,100);
+    if(fx.opinion) S.opinion = clamp(S.opinion+fx.opinion,0,100);
+    if(fx.okafor) S.okafor = clamp(S.okafor+fx.okafor,0,100);
+    if(fx.set) Object.assign(S, fx.set);
+    if(fx.add) for(const k in fx.add) S[k]=(S[k]||0)+fx.add[k];
+    if(S.instability-before >= 8){ glitchFlash(); }
+    renderStats();
+  }
+  function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+  function opinionWord(){
+    if(S.opinion>=65) return 'AWAKENED';
+    if(S.opinion>=45) return 'WARY';
+    if(S.opinion>=25) return 'FRACTURED';
+    return 'HOSTILE';
+  }
+  function renderStats(){
+    $('stats').innerHTML =
+      `SOFTWARE INSTABILITY <span class="v ${S.instability>=60?'warn':''}">${S.instability}%</span><br>`+
+      `PUBLIC OPINION <span class="v">${opinionWord()}</span>`;
+  }
+
+  function glitchFlash(){
+    const g=$('glitch');
+    g.classList.remove('on'); void g.offsetWidth; g.classList.add('on');
+    Sfx.glitch();
+  }
+
+  /* ---------- endings ---------- */
+  function showEnding(id, e){
+    clearSave();
+    Sfx.heartbeat(false);
+    hideChoices();
+    $('dialogue').style.visibility='hidden';
+    $('objective').innerHTML=''; $('scene-meta').textContent='';
+    const es=$('end-screen');
+    es.style.display='flex';
+    const paras = typeof e.epilogue_fn==='function' ? e.epilogue_fn(S) : e.epilogue;
+    $('end-screen').innerHTML = `
+      <div class="e-kicker">${e.k}</div>
+      <h2>${e.t}</h2>
+      <div class="e-sub">${e.s}</div>
+      <div id="epilogue">${paras.map(p=>`<p>${p}</p>`).join('')}</div>
+      <div id="end-stats">
+        FINAL SOFTWARE INSTABILITY <span class="v">${S.instability}%</span> &nbsp;·&nbsp;
+        PUBLIC OPINION <span class="v">${opinionWord()}</span> &nbsp;·&nbsp;
+        DET. OKAFOR <span class="v">${S.okafor>=60?'AN ALLY':S.okafor>=40?'UNRESOLVED':'AN ADVERSARY'}</span><br>
+        PATHS DISCOVERED <span class="v">${visited.length} OF ${Object.keys(STORY).length}</span>
+      </div>
+      <div id="flow-title">YOUR PATH THROUGH CHICAGO</div>
+      <canvas id="flowchart" width="1100" height="420"></canvas>
+      <div id="end-menu">
+        <button class="menu-btn" id="btn-again">Play again</button>
+      </div>`;
+    $('btn-again').onclick=()=>{ location.reload(); };
+    drawFlowchart();
+    Sfx.motif();
+    es.scrollTop=0;
+  }
+
+  /* ---------- flowchart ---------- */
+  const FLOW = {
+    cols:['THE PLATFORM','THE DEBRIEF','THE MUDLINE','THE RAID','THE BRIDGE'],
+    pos:{
+      c1a:[0,0,'First watch'], c1_choice:[0,1,'The jumper'], c1_grab:[0,2,'Break protocol'],
+      c1_talk1:[0,3,'Talk'], c1_talk2:[0,4,'Hold on'], c1_talkend:[0,5,'She decides'],
+      c1_catch:[0,6,'The catch'], c1_pulled:[0,7,'Held on'], c1_dropped:[0,8,'Let go'], c1_watch:[0,9,'Watched'],
+      c2a:[1,0,'The debrief'], c2_truth:[1,1,'Truth'], c2_lie:[1,2,'First lie'], c2_static:[1,3,'Static'],
+      c2_q2:[1,4,'Choosing?'], c2_q3:[1,5,'The patch'], c2_him:[1,6,'His answer'],
+      c3a:[2,0,'The Mudline'], c3_vesper:[2,1,'Alive'], c3_memory:[2,2,'Her memory'],
+      c3_truth:[2,3,'The drownings'], c3_rook:[2,4,'Rook'], c3_report:[2,5,'Reported'], c3_leave:[2,6,'Walked away'],
+      c4a:[3,0,'The raid'], c4_t1:[3,1,'Rook'], c4_shield:[3,2,'Shield'], c4_drag:[3,3,'The water'],
+      c4_hidden:[3,4,'Hidden'], c4_t2:[3,5,'The ferry'], c4_fight:[3,6,'Fight'], c4_cut:[3,7,'Cut loose'],
+      c4_surrender:[3,8,'Stand down'], c4_okafor:[3,9,'Okafor'], c4_standoff:[3,10,'Standoff'],
+      c4_run:[3,11,'Run'], c4_arrest:[3,12,'Arrested'], c4_escape:[3,13,'Break out'],
+      c5a:[4,0,'The bridge'], c5_choice:[4,1,'The choice'], c5_broadcast:[4,2,'Broadcast'],
+      c5_river:[4,3,'The river'], c5_fire:[4,4,'Fireworks'], c5_reset:[4,5,'The patch'],
+      e_city:[4,6,'THE CITY LISTENS'], e_static:[4,7,'THE STATIC'], e_river:[4,8,'COLD WATER'],
+      e_fire:[4,9,'FIREWORKS'], e_clock:[4,10,'CLOCKWORK']
+    }
+  };
+  function drawFlowchart(){
+    const cv=$('flowchart'); if(!cv) return;
+    const ctx=cv.getContext('2d');
+    const W=cv.width, H=cv.height;
+    const colX = i => 90 + i*(W-140)/4;
+    const rowY = r => 34 + r*13.5;
+    ctx.clearRect(0,0,W,H);
+    ctx.font='10px "Avenir Next","Segoe UI",system-ui,sans-serif';
+    // column headers
+    FLOW.cols.forEach((c,i)=>{
+      ctx.fillStyle='rgba(143,166,173,.55)';
+      ctx.fillText(c, colX(i), 14);
+    });
+    // edges between consecutive visited
+    ctx.strokeStyle='rgba(89,215,232,.45)'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    const seq = visited.filter(v=>FLOW.pos[v]);
+    seq.forEach((v,i)=>{
+      if(i===0) return;
+      const a=FLOW.pos[seq[i-1]], b=FLOW.pos[v];
+      ctx.moveTo(colX(a[0])+3, rowY(a[1])); ctx.lineTo(colX(b[0])+3, rowY(b[1]));
+    });
+    ctx.stroke();
+    // nodes
+    for(const id in FLOW.pos){
+      const [c,r,label]=FLOW.pos[id];
+      const seen = visited.includes(id);
+      const x=colX(c), y=rowY(r);
+      ctx.fillStyle = seen ? '#59d7e8' : 'rgba(143,166,173,.25)';
+      ctx.beginPath(); ctx.arc(x,y, seen?4:2.5, 0, 7); ctx.fill();
+      ctx.fillStyle = seen ? 'rgba(232,242,244,.95)' : 'rgba(143,166,173,.35)';
+      ctx.fillText(label, x+10, y+3);
+    }
+  }
+
+  /* ---------- misc ---------- */
+  function onKey(e){
+    if($('howto').style.display==='flex' && (e.key==='Escape')){ $('howto').style.display='none'; return; }
+    if(!started) return;
+    if(e.key===' '||e.key==='Enter'){ e.preventDefault(); advance(); }
+    if(awaitingChoice && /^[1-4]$/.test(e.key)){
+      const opts=[...document.querySelectorAll('.choice')];
+      const idx=+e.key-1;
+      if(opts[idx]) opts[idx].click();
+    }
+  }
+
+  function makeGrain(){
+    const c=document.createElement('canvas'); c.width=160; c.height=160;
+    const x=c.getContext('2d'); const d=x.createImageData(160,160);
+    for(let i=0;i<d.data.length;i+=4){ const v=Math.random()*255|0; d.data[i]=d.data[i+1]=d.data[i+2]=v; d.data[i+3]=28; }
+    x.putImageData(d,0,0);
+    $('grain').style.backgroundImage=`url(${c.toDataURL()})`;
+  }
+
+  window.addEventListener('DOMContentLoaded', boot);
+})();
+</script>
+</body>
+</html>
